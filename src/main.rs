@@ -1,4 +1,4 @@
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder};
 use redis::{Client, Commands, RedisError};
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -11,121 +11,138 @@ struct BasketItem {
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Basket {
-    user_id: i32,
+    user_id: String,
     items: Vec<BasketItem>,
 }
 
+fn get_user_id<'a>(req: &'a HttpRequest) -> Option<&'a str> {
+    req.headers().get("UserID")?.to_str().ok()
+}
+
 async fn add_item_to_basket(
+    req: HttpRequest,
     redis_client: web::Data<Client>,
     web::Json(item): web::Json<BasketItem>,
-    user_id: web::Path<i32>,
 ) -> impl Responder {
-    let mut conn = redis_client.get_connection().unwrap();
-    let basket_key = format!("basket:{}", user_id);
-    let basket_exists: bool = conn.exists(&basket_key).unwrap();
+    if let Some(user_id) = get_user_id(&req) {
+        let mut conn = redis_client.get_connection().unwrap();
+        let basket_key = format!("basket:{}", user_id);
+        let basket_exists: bool = conn.exists(&basket_key).unwrap();
 
-    if !basket_exists {
-        let basket = Basket {
-            user_id: *user_id,
-            items: vec![item],
-        };
+        if !basket_exists {
+            let basket = Basket {
+                user_id: (*user_id).to_string(),
+                items: vec![item],
+            };
 
-        let serialized_basket = serde_json::to_string(&basket).unwrap();
-        let _: () = conn.set(&basket_key, serialized_basket).unwrap();
+            let serialized_basket = serde_json::to_string(&basket).unwrap();
+            let _: () = conn.set(&basket_key, serialized_basket).unwrap();
 
-        HttpResponse::Ok().json(basket)
-    } else {
-        let serialized_basket: String = conn.get(&basket_key).unwrap();
-
-        let mut basket: Basket = serde_json::from_str(&serialized_basket).unwrap();
-        let mut item_index: Option<usize> = None;
-
-        for (index, basket_item) in basket.items.iter().enumerate() {
-            if basket_item.product_id == item.product_id {
-                item_index = Some(index);
-                break;
-            }
-        }
-
-        if let Some(index) = item_index {
-            basket.items[index].quantity += item.quantity;
+            HttpResponse::Ok().json(basket)
         } else {
-            basket.items.push(item);
-        }
+            let serialized_basket: String = conn.get(&basket_key).unwrap();
 
-        let updated_serialized_basket = serde_json::to_string(&basket).unwrap();
-        let _: () = conn.set(&basket_key, updated_serialized_basket).unwrap();
+            let mut basket: Basket = serde_json::from_str(&serialized_basket).unwrap();
+            let mut item_index: Option<usize> = None;
 
-        HttpResponse::Ok().json(basket)
-    }
-}
-
-async fn get_basket(redis_client: web::Data<Client>, user_id: web::Path<i32>) -> impl Responder {
-    let mut conn = redis_client.get_connection().unwrap();
-    let basket_key = format!("basket:{}", user_id);
-    let basket_exists: bool = conn.exists(&basket_key).unwrap();
-
-    if !basket_exists {
-        HttpResponse::Ok().json({
-            Basket {
-                user_id: *user_id,
-                items: vec![],
+            for (index, basket_item) in basket.items.iter().enumerate() {
+                if basket_item.product_id == item.product_id {
+                    item_index = Some(index);
+                    break;
+                }
             }
-        })
-    } else {
-        let serialized_basket: String = conn.get(&basket_key).unwrap();
-        let basket: Basket = serde_json::from_str(&serialized_basket).unwrap();
 
-        HttpResponse::Ok().json(basket)
-    }
-}
-
-async fn remove_item_from_basket(
-    redis_client: web::Data<Client>,
-    item: web::Json<BasketItem>,
-    user_id: web::Path<i32>,
-) -> impl Responder {
-    let mut conn = redis_client.get_connection().unwrap();
-    let basket_key = format!("basket:{}", user_id);
-    let basket_exists: bool = conn.exists(&basket_key).unwrap();
-
-    if basket_exists {
-        let serialized_basket: String = conn.get(&basket_key).unwrap();
-        let mut basket: Basket = serde_json::from_str(&serialized_basket).unwrap();
-        let mut item_index: Option<usize> = None;
-
-        for (index, basket_item) in basket.items.iter().enumerate() {
-            if basket_item.product_id == item.product_id {
-                item_index = Some(index);
-                break;
-            }
-        }
-
-        if let Some(index) = item_index {
-            let quantity_to_remove = item.quantity;
-            if basket.items[index].quantity > quantity_to_remove {
-                basket.items[index].quantity -= quantity_to_remove;
-                let updated_serialized_basket = serde_json::to_string(&basket).unwrap();
-                let _: () = conn.set(&basket_key, updated_serialized_basket).unwrap();
-
-                HttpResponse::Ok().json(basket)
+            if let Some(index) = item_index {
+                basket.items[index].quantity += item.quantity;
             } else {
-                basket.items.remove(index);
-                let updated_serialized_basket = serde_json::to_string(&basket).unwrap();
-                let _: () = conn.set(&basket_key, updated_serialized_basket).unwrap();
-
-                HttpResponse::Ok().json(basket)
+                basket.items.push(item);
             }
-        } else {
+
+            let updated_serialized_basket = serde_json::to_string(&basket).unwrap();
+            let _: () = conn.set(&basket_key, updated_serialized_basket).unwrap();
+
             HttpResponse::Ok().json(basket)
         }
     } else {
-        HttpResponse::Ok().json({
-            Basket {
-                user_id: *user_id,
-                items: vec![],
+        HttpResponse::BadRequest().body("UserID header is required")
+    }
+}
+
+async fn get_basket(req: HttpRequest, redis_client: web::Data<Client>) -> impl Responder {
+    if let Some(user_id) = get_user_id(&req) {
+        let mut conn = redis_client.get_connection().unwrap();
+        let basket_key = format!("basket:{}", user_id);
+        let basket_exists: bool = conn.exists(&basket_key).unwrap();
+
+        if !basket_exists {
+            HttpResponse::Ok().json({
+                Basket {
+                    user_id: (*user_id).to_string(),
+                    items: vec![],
+                }
+            })
+        } else {
+            let serialized_basket: String = conn.get(&basket_key).unwrap();
+            let basket: Basket = serde_json::from_str(&serialized_basket).unwrap();
+
+            HttpResponse::Ok().json(basket)
+        }
+    } else {
+        HttpResponse::BadRequest().body("UserID header is required")
+    }
+    
+}
+
+async fn remove_item_from_basket(
+    req: HttpRequest,
+    redis_client: web::Data<Client>,
+    item: web::Json<BasketItem>,
+) -> impl Responder {
+    if let Some(user_id) = get_user_id(&req) {
+        let mut conn = redis_client.get_connection().unwrap();
+        let basket_key = format!("basket:{}", user_id);
+        let basket_exists: bool = conn.exists(&basket_key).unwrap();
+
+        if basket_exists {
+            let serialized_basket: String = conn.get(&basket_key).unwrap();
+            let mut basket: Basket = serde_json::from_str(&serialized_basket).unwrap();
+            let mut item_index: Option<usize> = None;
+
+            for (index, basket_item) in basket.items.iter().enumerate() {
+                if basket_item.product_id == item.product_id {
+                    item_index = Some(index);
+                    break;
+                }
             }
-        })
+
+            if let Some(index) = item_index {
+                let quantity_to_remove = item.quantity;
+                if basket.items[index].quantity > quantity_to_remove {
+                    basket.items[index].quantity -= quantity_to_remove;
+                    let updated_serialized_basket = serde_json::to_string(&basket).unwrap();
+                    let _: () = conn.set(&basket_key, updated_serialized_basket).unwrap();
+
+                    HttpResponse::Ok().json(basket)
+                } else {
+                    basket.items.remove(index);
+                    let updated_serialized_basket = serde_json::to_string(&basket).unwrap();
+                    let _: () = conn.set(&basket_key, updated_serialized_basket).unwrap();
+
+                    HttpResponse::Ok().json(basket)
+                }
+            } else {
+                HttpResponse::Ok().json(basket)
+            }
+        } else {
+            HttpResponse::Ok().json({
+                Basket {
+                    user_id: (*user_id).to_string(),
+                    items: vec![],
+                }
+            })
+        }
+    } else {
+        return HttpResponse::BadRequest().body("UserID header is required");
     }
 }
 
@@ -140,7 +157,7 @@ async fn main() -> Result<(), RedisError> {
     HttpServer::new(move || {
         App::new()
             .data(redis_client.clone())
-            .service(web::resource("/basket/{user_id}")
+            .service(web::resource("/basket")
                 .route(web::get().to(get_basket))
                 .route(web::post().to(add_item_to_basket))
                 .route(web::delete().to(remove_item_from_basket))
