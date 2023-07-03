@@ -157,7 +157,7 @@ async fn main() -> Result<(), RedisError> {
     HttpServer::new(move || {
         App::new()
             .data(redis_client.clone())
-            .service(web::resource("/basket")
+            .service(web::resource("/")
                 .route(web::get().to(get_basket))
                 .route(web::post().to(add_item_to_basket))
                 .route(web::delete().to(remove_item_from_basket))

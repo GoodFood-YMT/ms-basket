@@ -1,0 +1,23 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-basket-cache
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ms-basket-cache
+  template:
+    metadata:
+      labels:
+        app: ms-basket-cache
+    spec:
+      containers:
+        - name: ms-basket-cache
+          image: redis
+          ports:
+            - containerPort: 6379
+          envFrom:
+            - configMapRef:
+                name: ms-basket-cache-config
+          resources: {}

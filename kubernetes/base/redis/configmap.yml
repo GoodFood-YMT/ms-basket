@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: ms-basket-cache-config
+  labels:
+    app: ms-basket-cache
+data: {}

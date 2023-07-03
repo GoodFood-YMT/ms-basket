@@ -1,0 +1,22 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  annotations:
+    nginx.ingress.kubernetes.io/auth-url: http://ms-auth.goodfood.svc.cluster.local/auth/authorized
+    nginx.ingress.kubernetes.io/auth-response-headers: UserID
+    nginx.ingress.kubernetes.io/auth-snippet: |
+      proxy_set_header FromUrl $request_uri; proxy_set_header Method $request_method;
+  name: ms-basket
+spec:
+  ingressClassName: nginx
+  rules:
+    - host: goodfood.localdev.me
+      http:
+        paths:
+          - pathType: Prefix
+            path: /basket/
+            backend:
+              service:
+                name: ms-basket
+                port:
+                  number: 80

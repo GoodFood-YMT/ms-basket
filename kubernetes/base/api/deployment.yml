@@ -1,0 +1,29 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: ms-basket
+  labels:
+    app: ms-basket
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: ms-basket
+  template:
+    metadata:
+      labels:
+        app: ms-basket
+    spec:
+      containers:
+        - envFrom:
+            - configMapRef:
+                name: ms-basket-config
+            - secretRef:
+                name: ms-basket-secret
+          image: yasinkara/ms-basket:latest
+          imagePullPolicy: Always
+          name: ms-basket
+          ports:
+            - containerPort: 8080
+          resources: {}
+      restartPolicy: Always
