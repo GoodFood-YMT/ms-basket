@@ -160,9 +160,9 @@ async fn main() -> Result<(), RedisError> {
         App::new()
             .data(redis_client.clone())
             .wrap(Logger::default())
-            .route("/", web::get().to(get_basket))
-            .route("/", web::post().to(add_item_to_basket))
-            .route("/", web::delete().to(remove_item_from_basket))
+            .route("/basket", web::get().to(get_basket))
+            .route("/basket", web::post().to(add_item_to_basket))
+            .route("/basket", web::delete().to(remove_item_from_basket))
     })
     .bind("0.0.0.0:8080")?
     .run()
