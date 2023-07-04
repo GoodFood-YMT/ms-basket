@@ -4,4 +4,6 @@ metadata:
   name: ms-basket-config
   labels:
     app: ms-basket
-data: {}
+data:
+  REDIS_HOST: "ms-basket-cache"
+  REDIS_PORT: "6379"
