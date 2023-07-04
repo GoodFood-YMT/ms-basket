@@ -1,4 +1,4 @@
-use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder};
+use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder, middleware::Logger};
 use redis::{Client, Commands, RedisError};
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -154,9 +154,12 @@ async fn main() -> Result<(), RedisError> {
     let redis_url = format!("redis://{}:{}/", redis_host, redis_port);
     let redis_client = Client::open(redis_url)?;
 
+    env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
+
     HttpServer::new(move || {
         App::new()
             .data(redis_client.clone())
+            .wrap(Logger::default())
             .service(web::resource("/")
                 .route(web::get().to(get_basket))
                 .route(web::post().to(add_item_to_basket))
