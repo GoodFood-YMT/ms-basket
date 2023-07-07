@@ -5,7 +5,7 @@ use std::env;
 
 #[derive(Debug, Serialize, Deserialize)]
 struct BasketItem {
-    product_id: i32,
+    product_id: String,
     quantity: i32,
 }
 
