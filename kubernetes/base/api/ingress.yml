@@ -3,7 +3,7 @@ kind: Ingress
 metadata:
   annotations:
     nginx.ingress.kubernetes.io/auth-url: http://ms-auth.goodfood.svc.cluster.local/auth/authorized
-    nginx.ingress.kubernetes.io/auth-response-headers: UserID, Role
+    nginx.ingress.kubernetes.io/auth-response-headers: UserID, Role, RestaurantID
     nginx.ingress.kubernetes.io/auth-snippet: |
       proxy_set_header FromUrl $request_uri; proxy_set_header Method $request_method;
   name: ms-basket
