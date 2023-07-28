@@ -146,6 +146,26 @@ async fn remove_item_from_basket(
     }
 }
 
+async fn clear_basket (req: HttpRequest, redis_client: web::Data<Client>) -> impl Responder {
+    if let Some(user_id) = get_user_id(&req) {
+        let mut conn = redis_client.get_connection().unwrap();
+        let basket_key = format!("basket:{}", user_id);
+        let basket_exists: bool = conn.exists(&basket_key).unwrap();
+
+        if basket_exists {
+            let serialized_basket: String = conn.get(&basket_key).unwrap();
+            let mut basket: Basket = serde_json::from_str(&serialized_basket).unwrap();
+            basket.items.clear();
+            let updated_serialized_basket = serde_json::to_string(&basket).unwrap();
+            let _: () = conn.set(&basket_key, updated_serialized_basket).unwrap();
+        }
+
+         HttpResponse::Ok().body("Basket cleared")
+    } else {
+        return HttpResponse::BadRequest().body("UserID header is required");
+    }
+}
+
 #[actix_web::main]
 async fn main() -> Result<(), RedisError> {
     let redis_host = env::var("REDIS_HOST").unwrap_or("127.0.0.1".to_string());
@@ -165,10 +185,16 @@ async fn main() -> Result<(), RedisError> {
                 .route(web::post().to(add_item_to_basket))
                 .route(web::delete().to(remove_item_from_basket))
             )
+            .service(web::resource("/basket/clear")
+                .route(web::delete().to(clear_basket))
+            )
             .service(web::resource("/basket/")
                 .route(web::get().to(get_basket))
                 .route(web::post().to(add_item_to_basket))
                 .route(web::delete().to(remove_item_from_basket))
+            )
+            .service(web::resource("/basket/clear/")
+                .route(web::delete().to(clear_basket))
             )
     })
     .bind("0.0.0.0:8080")?
