@@ -2,7 +2,8 @@ FROM rust:slim-buster
 
 RUN apt-get update && \
   apt-get -y upgrade && \
-  apt-get -y install libpq-dev
+  apt-get -y install libpq-dev && \
+  apt-get -y install pkg-config
 
 WORKDIR /app
 COPY . /app/
