@@ -3,16 +3,54 @@ use redis::{Client, Commands, RedisError};
 use serde::{Deserialize, Serialize};
 use std::env;
 
+// const CATALOG_SERVICE_URL: &str = "http://ms-catalog.goodfood.svc.cluster.local/catalog/product";
+const CATALOG_SERVICE_URL: &str = "http://goodfood.localdev.me/catalog/product";
+
+// e0df15c4-625f-45da-a1c6-adf18333796b
+// 4a29f32d-9feb-40dd-bda3-5bcb897a3744
+
 #[derive(Debug, Serialize, Deserialize)]
 struct BasketItem {
-    product_id: String,
+    id: String,
+    quantity: i32,
+    label: String,
+    description: String,
+    price: f32,
+    categoryId: String,
+    restaurantId: String,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct RequestItem {
+    id: String,
     quantity: i32,
 }
+
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Basket {
     user_id: String,
     items: Vec<BasketItem>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct ProductResponse {
+    id: String,
+    label: String,
+    description: String,
+    price: f32,
+    visible: bool,
+    quantity: i32,
+    categoryId: String,
+    restaurantId: String,
+}
+
+async fn fetch_product(product_id: &str) -> Result<ProductResponse, Box<dyn std::error::Error>> {
+    let url = format!("{}/{}", CATALOG_SERVICE_URL, product_id);
+    let client = reqwest::Client::new();
+
+    let body = client.get(&url).send().await?.json::<ProductResponse>().await?;
+    Ok(body)
 }
 
 fn get_user_id<'a>(req: &'a HttpRequest) -> Option<&'a str> {
@@ -22,7 +60,7 @@ fn get_user_id<'a>(req: &'a HttpRequest) -> Option<&'a str> {
 async fn add_item_to_basket(
     req: HttpRequest,
     redis_client: web::Data<Client>,
-    web::Json(item): web::Json<BasketItem>,
+    web::Json(item): web::Json<RequestItem>,
 ) -> impl Responder {
     if let Some(user_id) = get_user_id(&req) {
         let mut conn = redis_client.get_connection().unwrap();
@@ -30,15 +68,31 @@ async fn add_item_to_basket(
         let basket_exists: bool = conn.exists(&basket_key).unwrap();
 
         if !basket_exists {
-            let basket = Basket {
-                user_id: (*user_id).to_string(),
-                items: vec![item],
-            };
+            let product = fetch_product(&item.id).await;
 
-            let serialized_basket = serde_json::to_string(&basket).unwrap();
-            let _: () = conn.set(&basket_key, serialized_basket).unwrap();
+            if let Ok(product) = product {
+                let basket_item = BasketItem {
+                    id: product.id,
+                    quantity: item.quantity,
+                    label: product.label,
+                    description: product.description,
+                    price: product.price,
+                    categoryId: product.categoryId,
+                    restaurantId: product.restaurantId,
+                };
 
-            HttpResponse::Ok().json(basket)
+                let basket = Basket {
+                    user_id: (*user_id).to_string(),
+                    items: vec![basket_item],
+                };
+
+                let serialized_basket = serde_json::to_string(&basket).unwrap();
+                let _: () = conn.set(&basket_key, serialized_basket).unwrap();
+
+                HttpResponse::Ok().json(basket)
+            } else {
+                return HttpResponse::BadRequest().body("Product not found");
+            }
         } else {
             let serialized_basket: String = conn.get(&basket_key).unwrap();
 
@@ -46,7 +100,7 @@ async fn add_item_to_basket(
             let mut item_index: Option<usize> = None;
 
             for (index, basket_item) in basket.items.iter().enumerate() {
-                if basket_item.product_id == item.product_id {
+                if basket_item.id == item.id {
                     item_index = Some(index);
                     break;
                 }
@@ -55,7 +109,23 @@ async fn add_item_to_basket(
             if let Some(index) = item_index {
                 basket.items[index].quantity += item.quantity;
             } else {
-                basket.items.push(item);
+                let product = fetch_product(&item.id).await;
+
+                if let Ok(product) = product {
+                    let basket_item = BasketItem {
+                        id: product.id,
+                        quantity: item.quantity,
+                        label: product.label,
+                        description: product.description,
+                        price: product.price,
+                        categoryId: product.categoryId,
+                        restaurantId: product.restaurantId,
+                    };
+
+                    basket.items.push(basket_item);
+                } else {
+                    return HttpResponse::BadRequest().body("Product not found");
+                }
             }
 
             let updated_serialized_basket = serde_json::to_string(&basket).unwrap();
@@ -96,7 +166,7 @@ async fn get_basket(req: HttpRequest, redis_client: web::Data<Client>) -> impl R
 async fn remove_item_from_basket(
     req: HttpRequest,
     redis_client: web::Data<Client>,
-    item: web::Json<BasketItem>,
+    item: web::Json<RequestItem>,
 ) -> impl Responder {
     if let Some(user_id) = get_user_id(&req) {
         let mut conn = redis_client.get_connection().unwrap();
@@ -109,7 +179,7 @@ async fn remove_item_from_basket(
             let mut item_index: Option<usize> = None;
 
             for (index, basket_item) in basket.items.iter().enumerate() {
-                if basket_item.product_id == item.product_id {
+                if basket_item.id == item.id {
                     item_index = Some(index);
                     break;
                 }
