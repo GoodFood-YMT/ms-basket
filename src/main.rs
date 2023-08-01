@@ -45,6 +45,12 @@ struct ProductResponse {
     restaurantId: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct ErrorResponse {
+    error: String,
+    message: String,
+}
+
 async fn fetch_product(product_id: &str) -> Result<ProductResponse, Box<dyn std::error::Error>> {
     let url = format!("{}/{}", CATALOG_SERVICE_URL, product_id);
     let client = reqwest::Client::new();
@@ -91,7 +97,10 @@ async fn add_item_to_basket(
 
                 HttpResponse::Ok().json(basket)
             } else {
-                return HttpResponse::BadRequest().body("Product not found");
+                return HttpResponse::BadRequest().json(ErrorResponse {
+                    error: "PRODUCT_NOT_FOUND".to_string(),
+                    message: "Product not found".to_string(),
+                });
             }
         } else {
             let serialized_basket: String = conn.get(&basket_key).unwrap();
@@ -112,6 +121,20 @@ async fn add_item_to_basket(
                 let product = fetch_product(&item.id).await;
 
                 if let Ok(product) = product {
+                    // check if all items are from the same restaurant
+                    if basket.items.len() > 0 {
+                        // get first item in the basket and take the restaurantId
+                        let restaurant_id = &basket.items[0].restaurantId;
+
+                        // check if the restaurantId is the same as the one we are trying to add
+                        if restaurant_id != &product.restaurantId {
+                            return HttpResponse::BadRequest().json(ErrorResponse {
+                                error: "NOT_SAME_RESTAURANT".to_string(),
+                                message: "All items in the basket must be from the same restaurant".to_string(),
+                            });
+                        }
+                    }
+    
                     let basket_item = BasketItem {
                         id: product.id,
                         quantity: item.quantity,
@@ -124,7 +147,10 @@ async fn add_item_to_basket(
 
                     basket.items.push(basket_item);
                 } else {
-                    return HttpResponse::BadRequest().body("Product not found");
+                    return HttpResponse::BadRequest().json(ErrorResponse {
+                        error: "PRODUCT_NOT_FOUND".to_string(),
+                        message: "Product not found".to_string(),
+                    });
                 }
             }
 
@@ -134,7 +160,10 @@ async fn add_item_to_basket(
             HttpResponse::Ok().json(basket)
         }
     } else {
-        HttpResponse::BadRequest().body("UserID header is required")
+        return HttpResponse::BadRequest().json(ErrorResponse {
+            error: "UNAUTHORIZED".to_string(),
+            message: "Unauthorized".to_string(),
+        });
     }
 }
 
@@ -158,7 +187,10 @@ async fn get_basket(req: HttpRequest, redis_client: web::Data<Client>) -> impl R
             HttpResponse::Ok().json(basket)
         }
     } else {
-        HttpResponse::BadRequest().body("UserID header is required")
+        return HttpResponse::BadRequest().json(ErrorResponse {
+            error: "UNAUTHORIZED".to_string(),
+            message: "Unauthorized".to_string(),
+        });
     }
     
 }
@@ -212,7 +244,10 @@ async fn remove_item_from_basket(
             })
         }
     } else {
-        return HttpResponse::BadRequest().body("UserID header is required");
+        return HttpResponse::BadRequest().json(ErrorResponse {
+            error: "UNAUTHORIZED".to_string(),
+            message: "Unauthorized".to_string(),
+        });
     }
 }
 
@@ -232,7 +267,10 @@ async fn clear_basket (req: HttpRequest, redis_client: web::Data<Client>) -> imp
 
          HttpResponse::Ok().body("Basket cleared")
     } else {
-        return HttpResponse::BadRequest().body("UserID header is required");
+        return HttpResponse::BadRequest().json(ErrorResponse {
+            error: "UNAUTHORIZED".to_string(),
+            message: "Unauthorized".to_string(),
+        });
     }
 }
 
