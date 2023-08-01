@@ -3,11 +3,8 @@ use redis::{Client, Commands, RedisError};
 use serde::{Deserialize, Serialize};
 use std::env;
 
-// const CATALOG_SERVICE_URL: &str = "http://ms-catalog.goodfood.svc.cluster.local/catalog/product";
-const CATALOG_SERVICE_URL: &str = "http://goodfood.localdev.me/catalog/product";
-
-// e0df15c4-625f-45da-a1c6-adf18333796b
-// 4a29f32d-9feb-40dd-bda3-5bcb897a3744
+const CATALOG_SERVICE_URL: &str = "http://ms-catalog.goodfood.svc.cluster.local/catalog/product";
+// const CATALOG_SERVICE_URL: &str = "http://goodfood.localdev.me/catalog/product";
 
 #[derive(Debug, Serialize, Deserialize)]
 struct BasketItem {
