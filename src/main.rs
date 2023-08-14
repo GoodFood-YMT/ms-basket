@@ -3,7 +3,7 @@ use redis::{Client, Commands, RedisError};
 use serde::{Deserialize, Serialize};
 use std::env;
 
-const CATALOG_SERVICE_URL: &str = "http://ms-catalog.goodfood.svc.cluster.local/catalog/product";
+const CATALOG_SERVICE_URL: &str = "http://ms-catalog.goodfood.svc.cluster.local/catalog/products";
 // const CATALOG_SERVICE_URL: &str = "http://goodfood.localdev.me/catalog/product";
 
 #[derive(Debug, Serialize, Deserialize)]
