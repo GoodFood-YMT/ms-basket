@@ -290,7 +290,7 @@ async fn main() -> Result<(), RedisError> {
 
     HttpServer::new(move || {
         let cors = Cors::default()
-            .allowed_origin("*")
+            .send_wildcard()
             .allowed_methods(vec!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
             .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
             .allowed_header(http::header::CONTENT_TYPE)
