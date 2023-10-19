@@ -1,4 +1,7 @@
-use actix_web::{web, App, HttpRequest, HttpResponse, HttpServer, Responder, middleware::Logger};
+use actix_cors::Cors;
+use actix_web::{
+    http, middleware::Logger, web, App, HttpRequest, HttpResponse, HttpServer, Responder,
+};
 use redis::{Client, Commands, RedisError};
 use serde::{Deserialize, Serialize};
 use std::env;
@@ -22,7 +25,6 @@ struct RequestItem {
     id: String,
     quantity: i32,
 }
-
 
 #[derive(Debug, Serialize, Deserialize)]
 struct Basket {
@@ -52,7 +54,12 @@ async fn fetch_product(product_id: &str) -> Result<ProductResponse, Box<dyn std:
     let url = format!("{}/{}", CATALOG_SERVICE_URL, product_id);
     let client = reqwest::Client::new();
 
-    let body = client.get(&url).send().await?.json::<ProductResponse>().await?;
+    let body = client
+        .get(&url)
+        .send()
+        .await?
+        .json::<ProductResponse>()
+        .await?;
     Ok(body)
 }
 
@@ -127,11 +134,12 @@ async fn add_item_to_basket(
                         if restaurant_id != &product.restaurantId {
                             return HttpResponse::BadRequest().json(ErrorResponse {
                                 error: "NOT_SAME_RESTAURANT".to_string(),
-                                message: "All items in the basket must be from the same restaurant".to_string(),
+                                message: "All items in the basket must be from the same restaurant"
+                                    .to_string(),
                             });
                         }
                     }
-    
+
                     let basket_item = BasketItem {
                         id: product.id,
                         quantity: item.quantity,
@@ -189,7 +197,6 @@ async fn get_basket(req: HttpRequest, redis_client: web::Data<Client>) -> impl R
             message: "Unauthorized".to_string(),
         });
     }
-    
 }
 
 async fn remove_item_from_basket(
@@ -248,7 +255,7 @@ async fn remove_item_from_basket(
     }
 }
 
-async fn clear_basket (req: HttpRequest, redis_client: web::Data<Client>) -> impl Responder {
+async fn clear_basket(req: HttpRequest, redis_client: web::Data<Client>) -> impl Responder {
     if let Some(user_id) = get_user_id(&req) {
         let mut conn = redis_client.get_connection().unwrap();
         let basket_key = format!("basket:{}", user_id);
@@ -262,7 +269,7 @@ async fn clear_basket (req: HttpRequest, redis_client: web::Data<Client>) -> imp
             let _: () = conn.set(&basket_key, updated_serialized_basket).unwrap();
         }
 
-         HttpResponse::Ok().body("Basket cleared")
+        HttpResponse::Ok().body("Basket cleared")
     } else {
         return HttpResponse::BadRequest().json(ErrorResponse {
             error: "UNAUTHORIZED".to_string(),
@@ -282,29 +289,35 @@ async fn main() -> Result<(), RedisError> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
     HttpServer::new(move || {
+        let cors = Cors::default()
+            .allowed_origin("*")
+            .allowed_methods(vec!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
+            .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
+            .allowed_header(http::header::CONTENT_TYPE)
+            .max_age(3600);
+
         App::new()
             .data(redis_client.clone())
             .wrap(Logger::default())
-            .service(web::resource("/basket")
-                .route(web::get().to(get_basket))
-                .route(web::post().to(add_item_to_basket))
-                .route(web::delete().to(remove_item_from_basket))
+            .wrap(cors)
+            .service(
+                web::resource("/basket")
+                    .route(web::get().to(get_basket))
+                    .route(web::post().to(add_item_to_basket))
+                    .route(web::delete().to(remove_item_from_basket)),
             )
-            .service(web::resource("/basket/clear")
-                .route(web::delete().to(clear_basket))
+            .service(web::resource("/basket/clear").route(web::delete().to(clear_basket)))
+            .service(
+                web::resource("/basket/")
+                    .route(web::get().to(get_basket))
+                    .route(web::post().to(add_item_to_basket))
+                    .route(web::delete().to(remove_item_from_basket)),
             )
-            .service(web::resource("/basket/")
-                .route(web::get().to(get_basket))
-                .route(web::post().to(add_item_to_basket))
-                .route(web::delete().to(remove_item_from_basket))
-            )
-            .service(web::resource("/basket/clear/")
-                .route(web::delete().to(clear_basket))
-            )
+            .service(web::resource("/basket/clear/").route(web::delete().to(clear_basket)))
     })
     .bind("0.0.0.0:8080")?
     .run()
     .await?;
-    
+
     Ok(())
-}    
+}
