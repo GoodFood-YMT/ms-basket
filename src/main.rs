@@ -289,17 +289,10 @@ async fn main() -> Result<(), RedisError> {
     env_logger::init_from_env(env_logger::Env::new().default_filter_or("info"));
 
     HttpServer::new(move || {
-        let cors = Cors::default()
-            .send_wildcard()
-            .allowed_methods(vec!["GET", "HEAD", "POST", "PUT", "PATCH", "DELETE"])
-            .allowed_headers(vec![http::header::AUTHORIZATION, http::header::ACCEPT])
-            .allowed_header(http::header::CONTENT_TYPE)
-            .max_age(3600);
-
         App::new()
             .data(redis_client.clone())
             .wrap(Logger::default())
-            .wrap(cors)
+            .wrap(Cors::permissive())
             .service(
                 web::resource("/basket")
                     .route(web::get().to(get_basket))
