@@ -50,6 +50,11 @@ struct ErrorResponse {
     message: String,
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+struct BasketClearedResponde {
+    message: String,
+}
+
 async fn fetch_product(product_id: &str) -> Result<ProductResponse, Box<dyn std::error::Error>> {
     let url = format!("{}/{}", CATALOG_SERVICE_URL, product_id);
     let client = reqwest::Client::new();
@@ -269,7 +274,9 @@ async fn clear_basket(req: HttpRequest, redis_client: web::Data<Client>) -> impl
             let _: () = conn.set(&basket_key, updated_serialized_basket).unwrap();
         }
 
-        HttpResponse::Ok().body("Basket cleared")
+        HttpResponse::Ok().json(BasketClearedResponde {
+            message: "Basket cleared".to_string(),
+        })
     } else {
         return HttpResponse::BadRequest().json(ErrorResponse {
             error: "UNAUTHORIZED".to_string(),
